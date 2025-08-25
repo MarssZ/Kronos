@@ -34,7 +34,12 @@ import pandas as pd
 from model import Kronos, KronosTokenizer, KronosPredictor
 from fetch_ohlcv import fetch_ohlcv
 
-def main():
+def train_mode_predict():
+    """
+    训练模式预测 - 使用已知未来数据做验证
+    注意：这不是真正的预测，而是模型在已知数据上的拟合测试
+    保留此函数仅用于与真正预测的对比分析
+    """
     # ==================== 模型配置区域 ====================
     # 【需手动配置】模型路径 - 确保模型文件存在于指定路径
     tokenizer = KronosTokenizer.from_pretrained("./NeoQuasar/Kronos-Tokenizer-base")
@@ -106,6 +111,93 @@ def main():
     print("\n预测数据前5行:")
     print(pred_df.head())
     return pred_df
+
+def predict_real_future(exchange, symbol, timeframe, limit, lookback=250, pred_len=50):
+    """
+    真正的未来预测 - 基于历史数据预测真实未来
+    
+    Args:
+        exchange: 交易所对象
+        symbol: 交易对
+        timeframe: 时间周期 
+        limit: 获取数据量
+        lookback: 历史窗口长度
+        pred_len: 预测长度
+    
+    Returns:
+        pd.DataFrame: 预测结果
+    """
+    # 加载模型
+    tokenizer = KronosTokenizer.from_pretrained("./NeoQuasar/Kronos-Tokenizer-base")
+    model = Kronos.from_pretrained("./NeoQuasar/Kronos-small")
+    predictor = KronosPredictor(model, tokenizer, device="cuda:0", max_context=512)
+    print("模型加载完成！")
+    
+    # 获取历史数据
+    df = fetch_ohlcv(exchange, symbol, timeframe, limit)
+    if df is None or len(df) == 0:
+        raise ValueError("获取数据失败或数据为空")
+        
+    df['timestamps'] = pd.to_datetime(df['timestamps'], unit='ms')
+    
+    # 真正的预测只需要历史数据
+    if len(df) < lookback:
+        raise ValueError(f"历史数据不足: 需要{lookback}条, 实际{len(df)}条")
+    
+    # 使用最近的历史数据
+    x_df = df.iloc[-lookback:][['open', 'high', 'low', 'close', 'volume', 'amount']]
+    x_timestamp = df.iloc[-lookback:]['timestamps']
+    
+    # 计算时间间隔（分钟）
+    time_diff = (x_timestamp.iloc[-1] - x_timestamp.iloc[-2]).total_seconds() / 60
+    
+    # 生成真正的未来时间戳
+    last_time = x_timestamp.iloc[-1]
+    future_timestamps = pd.date_range(
+        start=last_time + pd.Timedelta(minutes=time_diff),
+        periods=pred_len,
+        freq=f'{int(time_diff)}min'
+    )
+    
+    # 执行真正的预测
+    pred_df = predictor.predict(
+        df=x_df,
+        x_timestamp=x_timestamp,
+        y_timestamp=pd.Series(future_timestamps),  # 转为Series避免DatetimeIndex.dt错误
+        pred_len=pred_len,
+        T=1.0,
+        top_p=0.9,
+        sample_count=1
+    )
+    
+    print(f"\n真实未来预测完成！预测了{len(pred_df)}个时间点")
+    print(f"历史数据截止时间: {x_timestamp.iloc[-1]}")
+    print(f"预测时间范围: {pred_df.index[0]} 到 {pred_df.index[-1]}")
+    print("\n预测数据前5行:")
+    print(pred_df.head())
+    return pred_df
+
+def main():
+    """
+    主函数 - 执行真正的未来预测
+    """
+    # 配置交易所
+    exchange = ccxt.okx({
+        'proxies': {
+            'http': 'http://localhost:1082',
+            'https': 'http://localhost:1082',
+        },
+    })
+    
+    # 执行真正的预测
+    return predict_real_future(
+        exchange=exchange,
+        symbol='BTC/USDT',
+        timeframe='15m',
+        limit=300,
+        lookback=250,
+        pred_len=50
+    )
 
 if __name__ == "__main__":
     main()
