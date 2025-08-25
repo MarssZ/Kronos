@@ -112,7 +112,7 @@ def train_mode_predict():
     print(pred_df.head())
     return pred_df
 
-def predict_real_future(exchange, symbol, timeframe, limit, lookback=250, pred_len=50):
+def predict_real_future(exchange, symbol, timeframe, history_count=300, pred_len=50):
     """
     真正的未来预测 - 基于历史数据预测真实未来
     
@@ -120,8 +120,7 @@ def predict_real_future(exchange, symbol, timeframe, limit, lookback=250, pred_l
         exchange: 交易所对象
         symbol: 交易对
         timeframe: 时间周期 
-        limit: 获取数据量
-        lookback: 历史窗口长度
+        history_count: 历史数据量(默认300，ccxt单次获取上限)
         pred_len: 预测长度
     
     Returns:
@@ -134,19 +133,19 @@ def predict_real_future(exchange, symbol, timeframe, limit, lookback=250, pred_l
     print("模型加载完成！")
     
     # 获取历史数据
-    df = fetch_ohlcv(exchange, symbol, timeframe, limit)
+    df = fetch_ohlcv(exchange, symbol, timeframe, history_count)
     if df is None or len(df) == 0:
         raise ValueError("获取数据失败或数据为空")
         
     df['timestamps'] = pd.to_datetime(df['timestamps'], unit='ms')
     
-    # 真正的预测只需要历史数据
-    if len(df) < lookback:
-        raise ValueError(f"历史数据不足: 需要{lookback}条, 实际{len(df)}条")
+    # 验证数据充足性
+    if len(df) < history_count:
+        raise ValueError(f"获取数据不足: 需要{history_count}条, 实际{len(df)}条")
     
-    # 使用最近的历史数据
-    x_df = df.iloc[-lookback:][['open', 'high', 'low', 'close', 'volume', 'amount']]
-    x_timestamp = df.iloc[-lookback:]['timestamps']
+    # 使用所有历史数据
+    x_df = df[['open', 'high', 'low', 'close', 'volume', 'amount']]
+    x_timestamp = df['timestamps']
     
     # 计算时间间隔（分钟）
     time_diff = (x_timestamp.iloc[-1] - x_timestamp.iloc[-2]).total_seconds() / 60
@@ -194,8 +193,7 @@ def main():
         exchange=exchange,
         symbol='BTC/USDT',
         timeframe='15m',
-        limit=300,
-        lookback=250,
+        history_count=300,
         pred_len=50
     )
 
