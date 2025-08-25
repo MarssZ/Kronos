@@ -1,51 +1,32 @@
-# Kronos 加密货币价格预测
+# Kronos 金融预测系统
 
-> **基于Kronos时间序列预测模型的加密货币价格预测工具**
+> **基于Kronos模型的多数据源金融预测工具**
 
-## 📋 项目简介
+## 核心功能
 
-本项目使用预训练的Kronos模型进行加密货币价格预测。Kronos是专门为金融市场K线数据设计的基础模型，通过分层离散化token技术处理OHLCV数据，实现高精度的时间序列预测。
+- **多数据源**: 支持A股(tushare) + 加密货币(ccxt)
+- **真实预测**: 基于纯历史数据预测真实未来
+- **统一接口**: `fetch_ohlcv()`统一处理所有数据源
+- **智能测试**: 测试文件统一管理在`tests/`目录
 
-## ✨ 核心功能
+## 快速开始
 
-- 🚀 **实时数据获取**: 通过ccxt库从主流交易所获取实时K线数据
-- 🧠 **AI预测引擎**: 使用预训练Kronos模型进行时间序列预测  
-- ⚙️ **灵活配置**: 支持多种交易对、时间周期和预测参数
-- 📊 **完整特征**: 支持OHLCV+Amount六维特征预测
-- 🎯 **高精度**: 基于Transformer架构的自回归预测
-
-## 🚀 快速开始
-
-### 环境要求
-
-- Python 3.10+
-- CUDA支持的GPU (推荐)
-- 代理工具 (国内用户访问海外交易所需要)
-
-### 安装依赖
+### 1分钟启动
 
 ```bash
-# 使用uv管理依赖 (推荐)
-uv add ccxt pandas torch transformers
+# 安装依赖
+uv sync
 
-# 或使用pip
-pip install ccxt pandas torch transformers
-```
-
-### 模型准备
-
-将预训练模型放在以下路径：
-```
-./NeoQuasar/
-├── Kronos-Tokenizer-base/
-└── Kronos-small/
-```
-
-### 运行预测
-
-```bash
+# 运行A股预测(推荐 - 无需代理)
 python predict.py
+
+# 运行测试
+python tests/test_integration.py
 ```
+
+### 模型文件
+
+确保`./NeoQuasar/`下有预训练模型文件。
 
 ## ⚙️ 配置说明
 
