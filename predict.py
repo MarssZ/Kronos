@@ -3,30 +3,36 @@ Kronos时间序列预测模型 - 加密货币价格预测demo
 核心功能：使用预训练的Kronos模型预测加密货币未来价格走势
 
 【快速配置指南】
-1. 模型路径配置 (第14-15行):
+1. 模型路径配置 (第134-135行):
    - 确保./NeoQuasar/目录下有模型文件
    
-2. 设备配置 (第20行):
+2. 设备配置 (第137行):
    - 有GPU: device="cuda:0" 
    - 仅CPU: device="cpu"
    
-3. 代理配置 (第28-29行):
+3. 代理配置 (第196-199行):
    - 海外服务器: 删除proxies配置
    - 国内用户: 确保本地代理端口1082已启动
    
-4. 交易配置 (第38行):
+4. 交易配置 (第205-208行):
    - 交易对: 'BTC/USDT', 'ETH/USDT', 'SOL/USDT'等
    - 时间周期: '1m', '5m', '15m', '1h', '4h', '1d'
-   - 数据量: 建议300-1000条，影响预测质量
+   - history_count: 历史数据量(默认300，ccxt单次获取上限)
    
-5. 预测配置 (第49-50行):
-   - lookback: 历史窗口，越大越准确但越慢
-   - pred_len: 预测长度，不宜超过历史窗口的1/4
+5. 预测配置 (第208行):
+   - pred_len: 预测长度(默认30)
+   - 重要限制: history_count + pred_len ≤ 512 (模型上下文限制)
    
-6. 生成参数调优 (第96-98行):
+6. 生成参数调优 (第178-180行):
    - T(温度): 控制预测随机性，越低越确定(0.1-2.0)
    - top_p(核采样): 概率阈值，保留累积概率前p的token(0.1-1.0)
    - sample_count: 多次采样求均值，提高预测稳定性(1-10)
+
+【重要改进】
+✅ 真正的未来预测：predict_real_future() - 基于纯历史数据预测真实未来
+❌ 训练模式伪预测：train_mode_predict() - 使用已知未来数据做验证(仅用于对比)
+✅ 参数简化：合并了limit和lookback，消除数据浪费
+✅ 上下文验证：防止超出模型512长度限制
 """
 
 import ccxt
@@ -122,6 +128,10 @@ def predict_real_future(exchange, symbol, timeframe, history_count=300, pred_len
         timeframe: 时间周期 
         history_count: 历史数据量(默认300，ccxt单次获取上限)
         pred_len: 预测长度
+        
+    注意:
+        history_count + pred_len 不能超过模型上下文限制(512)
+        当前默认: 300 + 50 = 350 < 512 ✓
     
     Returns:
         pd.DataFrame: 预测结果
@@ -129,8 +139,15 @@ def predict_real_future(exchange, symbol, timeframe, history_count=300, pred_len
     # 加载模型
     tokenizer = KronosTokenizer.from_pretrained("./NeoQuasar/Kronos-Tokenizer-base")
     model = Kronos.from_pretrained("./NeoQuasar/Kronos-small")
-    predictor = KronosPredictor(model, tokenizer, device="cuda:0", max_context=512)
+    max_context = 512  # 模型上下文窗口限制
+    predictor = KronosPredictor(model, tokenizer, device="cuda:0", max_context=max_context)
     print("模型加载完成！")
+    
+    # 关键验证：防止超出模型上下文限制
+    total_length = history_count + pred_len
+    if total_length > max_context:
+        raise ValueError(f"序列长度超出模型限制: {total_length} > {max_context} "
+                        f"(history_count={history_count} + pred_len={pred_len})")
     
     # 获取历史数据
     df = fetch_ohlcv(exchange, symbol, timeframe, history_count)
@@ -194,7 +211,7 @@ def main():
         symbol='BTC/USDT',
         timeframe='15m',
         history_count=300,
-        pred_len=50
+        pred_len=30
     )
 
 if __name__ == "__main__":
