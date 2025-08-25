@@ -1,6 +1,7 @@
-  ---
-  description: 基于需求创建设计文档
-  ---
+---
+description: 基于需求创建设计文档
+argument-hint: [你的需求文档地址]
+---
 
   # 目标
 
