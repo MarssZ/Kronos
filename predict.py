@@ -38,7 +38,7 @@ Kronos时间序列预测模型 - 加密货币价格预测demo
 import ccxt
 import pandas as pd
 from model import Kronos, KronosTokenizer, KronosPredictor
-from fetch_ohlcv import fetch_ohlcv
+from src.fetch_ohlcv import fetch_ohlcv
 
 def train_mode_predict():
     """
@@ -72,12 +72,15 @@ def train_mode_predict():
     # symbol: 'BTC/USDT', 'ETH/USDT', 'SOL/USDT' 等
     # timeframe: '1m', '5m', '15m', '1h', '4h', '1d' 等
     # limit: 获取K线数量，影响预测质量和计算时间
-    df = fetch_ohlcv(exchange, 'BTC/USDT', '15m', 300)
     if df is None or len(df) == 0:
         raise ValueError("获取数据失败或数据为空")
         
-    # 时间戳转换 - ccxt返回毫秒级时间戳，转换为datetime
-    df['timestamps'] = pd.to_datetime(df['timestamps'], unit='ms')
+    # 时间戳转换 - 根据数据源类型处理
+    # crypto数据(ccxt): 毫秒时间戳需要转换
+    # A股数据(tushare): 已经是datetime对象，无需转换
+    if df['timestamps'].dtype == 'int64':  # 毫秒时间戳
+        df['timestamps'] = pd.to_datetime(df['timestamps'], unit='ms')
+    # 如果已经是datetime类型，保持不变
     
     # ==================== 预测参数配置区域 ====================
     # 【需手动配置】预测窗口设置
@@ -118,20 +121,20 @@ def train_mode_predict():
     print(pred_df.head())
     return pred_df
 
-def predict_real_future(exchange, symbol, timeframe, history_count=300, pred_len=50):
+def predict_real_future(symbol, source='crypto', exchange=None, timeframe='15m', history_count=300, pred_len=50):
     """
-    真正的未来预测 - 基于历史数据预测真实未来
+    真正的未来预测 - 支持crypto和A股两种数据源
     
     Args:
-        exchange: 交易所对象
-        symbol: 交易对
-        timeframe: 时间周期 
-        history_count: 历史数据量(默认300，ccxt单次获取上限)
+        symbol: 标的代码 ('BTC/USDT' 或 '600848')
+        source: 数据源类型 ('crypto' 或 'cn_stock')
+        exchange: 交易所对象 (仅crypto需要)
+        timeframe: 时间周期 (仅crypto需要)
+        history_count: 历史数据量
         pred_len: 预测长度
         
     注意:
         history_count + pred_len 不能超过模型上下文限制(512)
-        当前默认: 300 + 50 = 350 < 512 ✓
     
     Returns:
         pd.DataFrame: 预测结果
@@ -149,12 +152,23 @@ def predict_real_future(exchange, symbol, timeframe, history_count=300, pred_len
         raise ValueError(f"序列长度超出模型限制: {total_length} > {max_context} "
                         f"(history_count={history_count} + pred_len={pred_len})")
     
-    # 获取历史数据
-    df = fetch_ohlcv(exchange, symbol, timeframe, history_count)
+    # 根据数据源获取历史数据
+    if source == 'crypto':
+        if exchange is None:
+            raise ValueError("crypto数据源需要提供exchange参数")
+        df = fetch_ohlcv(exchange, symbol, timeframe, history_count)
+    elif source == 'cn_stock':
+        df = fetch_ohlcv(symbol, source='cn_stock', limit=history_count)
+    else:
+        raise ValueError(f"不支持的数据源: {source}")
+        
     if df is None or len(df) == 0:
         raise ValueError("获取数据失败或数据为空")
         
-    df['timestamps'] = pd.to_datetime(df['timestamps'], unit='ms')
+    # 时间戳转换 - 根据数据源类型处理
+    if df['timestamps'].dtype == 'int64':  # crypto毫秒时间戳
+        df['timestamps'] = pd.to_datetime(df['timestamps'], unit='ms')
+    # A股数据已经是datetime类型，无需转换
     
     # 验证数据充足性
     if len(df) < history_count:
@@ -189,30 +203,50 @@ def predict_real_future(exchange, symbol, timeframe, history_count=300, pred_len
     print(f"\n真实未来预测完成！预测了{len(pred_df)}个时间点")
     print(f"历史数据截止时间: {x_timestamp.iloc[-1]}")
     print(f"预测时间范围: {pred_df.index[0]} 到 {pred_df.index[-1]}")
-    print("\n预测数据前5行:")
-    print(pred_df.head())
+    print("\n预测数据:")
+    print(pred_df)
     return pred_df
 
 def main():
     """
-    主函数 - 执行真正的未来预测
+    主函数 - 演示crypto和A股两种预测方式
     """
-    # 配置交易所
-    exchange = ccxt.okx({
-        'proxies': {
-            'http': 'http://localhost:1082',
-            'https': 'http://localhost:1082',
-        },
-    })
+    print("=== Kronos多数据源预测演示 ===\n")
     
-    # 执行真正的预测
-    return predict_real_future(
-        exchange=exchange,
-        symbol='BTC/USDT',
-        timeframe='15m',
-        history_count=300,
-        pred_len=30
-    )
+    # 方式1: A股预测 (推荐，无需代理)
+    print("1. A股预测示例:")
+    try:
+        pred_df = predict_real_future(
+            symbol='600104',           # 上汽集团
+            source='cn_stock',
+            history_count=365,         # 使用200天历史数据
+            pred_len=30               # 预测未来30天
+        )
+        return pred_df
+    except Exception as e:
+        print(f"A股预测失败: {e}")
+    
+    # 方式2: Crypto预测 (需要代理)
+    # print("\n2. Crypto预测示例:")
+    # try:
+    #     exchange = ccxt.okx({
+    #         'proxies': {
+    #             'http': 'http://localhost:1082',
+    #             'https': 'http://localhost:1082',
+    #         },
+    #     })
+        
+    #     return predict_real_future(
+    #         symbol='BTC/USDT',
+    #         source='crypto',
+    #         exchange=exchange,
+    #         timeframe='15m',
+    #         history_count=300,
+    #         pred_len=30
+    #     )
+    # except Exception as e:
+    #     print(f"Crypto预测失败: {e}")
+    #     return None
 
 if __name__ == "__main__":
     main()

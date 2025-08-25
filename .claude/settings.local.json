@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(uv python pin:*)"
+      "Bash(uv python pin:*)",
+      "Bash(python:*)",
+      "Bash(source:*)",
+      "Bash(..venvScriptsactivate)"
     ],
     "deny": [],
     "ask": []
