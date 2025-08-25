@@ -10,6 +10,8 @@ def fetch_ohlcv(exchange, symbol, timeframe, limit):
             print(f"读取到 {len(ohlcv)} 根蜡烛")
             # 转换为DataFrame with正确列名
             df = pd.DataFrame(ohlcv, columns=['timestamps', 'open', 'high', 'low', 'close', 'volume'])
+            # 添加amount列 - KronosPredictor需要6个特征
+            df['amount'] = df['volume'] * df[['open', 'high', 'low', 'close']].mean(axis=1)
             return df
         return pd.DataFrame()
     except Exception as e:
